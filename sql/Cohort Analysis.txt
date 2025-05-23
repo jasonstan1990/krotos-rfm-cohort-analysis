@@ -1,0 +1,17 @@
+WITH first_purchase AS (
+  SELECT user_id, MIN(transaction_created_date) AS first_date
+  FROM `studious-pulsar-427214-g0.krotos_data.transactions`
+  GROUP BY user_id
+),
+cohorts AS (
+  SELECT
+    FORMAT_DATE('%Y-%m', DATE_TRUNC(DATE(f.first_date), MONTH)) AS cohort_month,
+    FORMAT_DATE('%Y-%m', DATE_TRUNC(DATE(t.transaction_created_date), MONTH)) AS order_month,
+    COUNT(DISTINCT t.user_id) AS user_count
+  FROM first_purchase f
+  JOIN `studious-pulsar-427214-g0.krotos_data.transactions` t
+    ON f.user_id = t.user_id
+  GROUP BY cohort_month, order_month
+  ORDER BY cohort_month, order_month
+)
+SELECT * FROM cohorts;

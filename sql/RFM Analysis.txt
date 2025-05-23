@@ -1,0 +1,49 @@
+WITH latest_transaction AS (
+  SELECT MAX(transaction_created_date) AS max_date
+  FROM `studious-pulsar-427214-g0.krotos_data.transactions`
+),
+
+rfm AS (
+  SELECT
+    t.user_id,
+    DATE_DIFF(MAX(l.max_date), MAX(t.transaction_created_date), DAY) AS recency,
+    COUNT(t.order_id) AS frequency,
+    ROUND(SUM(t.net_amount), 2) AS monetary
+  FROM `studious-pulsar-427214-g0.krotos_data.transactions` t,
+       latest_transaction l
+  GROUP BY t.user_id
+),
+
+rfm_scored AS (
+  SELECT *,
+    NTILE(5) OVER (ORDER BY recency ASC) AS r_score,
+    NTILE(5) OVER (ORDER BY frequency DESC) AS f_score,
+    NTILE(5) OVER (ORDER BY monetary DESC) AS m_score
+  FROM rfm
+),
+
+rfm_final AS (
+  SELECT *,
+    CAST(r_score AS STRING) || CAST(f_score AS STRING) || CAST(m_score AS STRING) AS rfm_score
+  FROM rfm_scored
+)
+
+SELECT
+  rfm_final.*,
+  u.user_first_transaction_channel,
+  
+  CASE
+    WHEN rfm_score = '555' THEN 'Champion'
+    WHEN r_score >= 4 AND f_score >= 4 AND m_score >= 4 THEN 'Royal Customer'
+    WHEN r_score >= 4 AND f_score <= 2 THEN 'Recent but Low Frequency'
+    WHEN r_score <= 2 AND f_score >= 4 THEN 'At Risk High Value'
+    WHEN r_score = 1 AND f_score = 1 AND m_score = 1 THEN 'Lost'
+    WHEN r_score <= 2 AND f_score <= 2 THEN 'Ηibernating'
+    ELSE 'Others'
+  END AS segment
+
+FROM rfm_final
+LEFT JOIN `studious-pulsar-427214-g0.krotos_data.users` u
+  ON rfm_final.user_id = u.user_id
+ORDER BY segment, rfm_score DESC;
+
